@@ -32,7 +32,7 @@ define('OIDC_PATH' ,   PHPWG_PLUGINS_PATH . OIDC_ID . '/');
 define('OIDC_ADMIN',   get_root_url() . 'admin.php?page=plugin-' . OIDC_ID);
 define('OIDC_SESSION', OIDC_ID);
 define('OIDC_TABLE',   $prefixeTable . "oidc");
-define('USERS_TABLE',   $prefixeTable . "oidc");
+define('USERS_TABLE',   $prefixeTable . "users");
 
 require(OIDC_PATH . 'oidc.php');
 
