@@ -123,6 +123,22 @@ function oidc_retrieve(OpenIDConnectClient $oidc, $force_registration = false) {
 		WHERE `sub` = \'' . pwg_db_real_escape_string($sub) . '\';';
 	$row = pwg_db_fetch_assoc(pwg_query($query));
 
+	// If the user is not found, try to map existing user
+    if (empty($row['id'])) {
+            $query = '
+                    SELECT id
+                    FROM ' . USERS_TABLE . '
+                    WHERE `username` = \'' . pwg_db_real_escape_string($name) . '\';';
+            $userrow = pwg_db_fetch_assoc(pwg_query($query));
+            if (!empty($userrow['id'])) {
+            	single_insert(OIDC_TABLE, [
+					'sub' => $sub,
+					'user_id' => $userrow['id'],
+				]);
+				$row = pwg_db_fetch_assoc(pwg_query($query));
+            }
+    }
+
 	// If the user is not found, try to register
 	if (empty($row['id'])) {
 		if ($config['register_new_users'] || $force_registration) {
