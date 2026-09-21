@@ -1,14 +1,16 @@
 <?php
 /*
 Plugin Name: OpenId Connect
-Version: auto
+Version: 1.0.4
 Description: This plugin provides OpenID Connect integration.
-Plugin URI: auto
+Plugin URI: http://piwigo.org/ext/extension_view.php?eid=918
 Author: Jasper Weyne
+Author URI: http://github.com/jasperweyne
+Has Settings: true
 */
 
 /*
-   Copyright 2020 Jasper Weyne
+   Copyright 2020-2021 Jasper Weyne
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
@@ -48,6 +50,7 @@ add_event_handler('loc_end_identification', 'oidc_identification');
 add_event_handler('user_init', 'refresh_login');
 add_event_handler('get_admin_plugin_menu_links', 'oidc_admin_link');
 add_event_handler('delete_user', 'oidc_delete_user');
+add_event_handler('ws_add_methods', 'oidc_api');
 
 /// Utility methods
 /**
@@ -67,9 +70,20 @@ function random_pass($length = 16, $keyspace = "abcdefghijklmnopqrstuvwxyzABCDEF
 /**
  * Check whether an access token or OpenID token isn't expired.
  */
-function is_token_unexpired($access_token): bool
+function is_token_unexpired($access_token, $oidc): bool
 {
-	return isset($access_token->expires) && $access_token->expires >= time();
+	if (isset($access_token->expires)) {
+		return $access_token->expires >= time();
+	} else {
+		// If user info retrieval is successful, token is still valid
+		try {
+			$oidc->setAccessToken($access_token->access_token);
+			$oidc->requestUserInfo();
+			return true;
+		} catch (\Exception $e) {
+			return false;
+		}
+	}
 }
 
 /// Event handlers
@@ -189,13 +203,13 @@ function refresh_login($user)
 	$accessToken = json_decode($json);
 
 	// If the token is not expired, refreshing isn't necessary
-	if (is_token_unexpired($accessToken)) {
+	$oidc = get_oidc_client();
+	if (is_token_unexpired($accessToken, $oidc)) {
 		return;
 	}
 
 	// Try to obtain refreshed access token
 	try {
-		$oidc = get_oidc_client();
 		$response = $oidc->refreshToken($accessToken->refresh_token);
 		if (isset($response->refresh_token)) {
 			$accessToken->refresh_token = $response->refresh_token;
@@ -279,5 +293,23 @@ function oidc_delete_user($user_id)
 	  WHERE `user_id` = '.$user_id.'
 	;';
 	pwg_query($query);
+}
+
+/**
+ * Register WS API methods 
+ */
+function oidc_api($params)
+{
+	$service = &$params[0];
+	$service->addMethod(
+		'pwg.session.login_oidc',
+		'api_login',
+		array(
+			'access_token' => array(),
+		),
+		'Tries to login the user using an OIDC token.',
+		OIDC_PATH . 'api.php',
+		array('post_only' => true)
+	);
 }
 ?>
