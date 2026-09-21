@@ -22,6 +22,34 @@ require __DIR__ . '/vendor/autoload.php';
 use Jumbojett\OpenIDConnectClient;
 
 /**
+ * OpenIDConnectClient variant that keeps PHP 8 deprecation notices out of the response.
+ *
+ * jumbojett/openid-connect-php calls curl_close() at the end of fetchURL(). Since
+ * PHP 8.0 a cURL handle is an object released by the garbage collector, so the call
+ * does nothing, and PHP 8.5 deprecates it. On a server with display_errors enabled
+ * the notice is written to the response body mid-request, which breaks the Location
+ * header the library sends straight after (the authorize redirect) and corrupts
+ * regular page and webservice output elsewhere.
+ *
+ * fetchURL() is the only place the library touches cURL, so narrowing error_reporting
+ * around that one call removes the output without hiding anything else. Upstream
+ * applies the equivalent fix (skipping curl_close() on PHP 8+) on master, but it is
+ * not part of any tagged release.
+ */
+class PiwigoOpenIDConnectClient extends OpenIDConnectClient
+{
+	protected function fetchURL($url, $post_body = null, $headers = []) {
+		$reporting = error_reporting();
+		error_reporting($reporting & ~E_DEPRECATED);
+		try {
+			return parent::fetchURL($url, $post_body, $headers);
+		} finally {
+			error_reporting($reporting);
+		}
+	}
+}
+
+/**
  * Create an instance of OpenIDConnectClient with the configured settings
  */
 function get_oidc_client() {
@@ -29,7 +57,7 @@ function get_oidc_client() {
 	$config = $conf['OIDC'];
 	
 	// Create OIDC client
-	$oidc = new OpenIDConnectClient(
+	$oidc = new PiwigoOpenIDConnectClient(
 		$config['issuer_url'] ?? '',
 		$config['client_id'] ?? '',
 		$config['client_secret'] ?? ''
